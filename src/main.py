@@ -10,6 +10,7 @@ pygame.display.set_caption("Shooter Game")
 
 x=200
 y=200
+img = pygame.image.load("assets/img/player/Idle/0.png").convert()
 
 run = True
 while run:
