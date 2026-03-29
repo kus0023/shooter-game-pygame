@@ -1,0 +1,72 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*.so
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Distribution / packaging
+bin/
+build/
+develop-eggs/
+dist/
+eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Unit test / coverage reports
+.tox/
+.coverage
+.cache
+nosetests.xml
+coverage.xml
+
+# IDE-specific files (e.g., PyCharm, VS Code)
+.idea/  # Uncomment to ignore the entire PyCharm idea folder, use with caution
+.vscode/ # Add to ignore VS Code settings
+.spyderproject
+.spyproject
+.ropeproject
+
+# Documentation
+/site
+docs/_build/
+
+# Type checker cache files
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+.pytype/
+
+# Celery
+celerybeat-schedule
+celerybeat.pid
+
+# Redis
+*.rdb
+*.aof
+*.pid
+
+# SageMath
+*.sage.py
+
+# Cython
+cython_debug/
+
+# Python Tools
+pip-log.txt
+pip-delete-this-directory.txt
