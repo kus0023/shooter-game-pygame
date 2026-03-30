@@ -70,3 +70,5 @@ cython_debug/
 # Python Tools
 pip-log.txt
 pip-delete-this-directory.txt
+
+.vscode

@@ -1,7 +1,6 @@
 import pygame
 
-pygame_variable = pygame.init()
-print("pygame initialised", pygame_variable)
+pygame.init()
 
 SCREEN_WIDTH = 800
 SCREEN_HEIGHT = int(SCREEN_WIDTH * 0.8)
@@ -15,6 +14,7 @@ FPS = 45
 
 # Game variable
 GRAVITY = 0.75
+TILE_SIZE = 40
 
 
 # movement
@@ -86,6 +86,12 @@ class Soldier(pygame.sprite.Sprite):
         # update shoot cooldown
         if self.shoot_cooldown > 0:
             self.shoot_cooldown -= 1
+
+        # player die
+        if not self.is_alive:
+            # if dead animation is done then kill the object
+            if self.frame_index >= len(self.animation_dict["Death"]) - 1:
+                self.kill()
 
     def move(self, moving_left, moving_right):
         dx = 0
@@ -255,10 +261,12 @@ class Bullet(pygame.sprite.Sprite):
             if player.is_alive:
                 player.health -= 5
                 self.kill()
-        if pygame.sprite.spritecollide(enemy, bullet_group, False):
-            if enemy.is_alive:
-                enemy.health -= 25
-                self.kill()
+
+        for enemy in enemy_group:
+            if pygame.sprite.spritecollide(enemy, bullet_group, False):
+                if enemy.is_alive:
+                    enemy.health -= 25
+                    self.kill()
 
 
 class Grenade(pygame.sprite.Sprite):
@@ -266,7 +274,7 @@ class Grenade(pygame.sprite.Sprite):
         pygame.sprite.Sprite.__init__(self)
         self.speed = 7
         self.vel_y = -11
-        self.timer = 100
+        self.explode_timer = 100
         self.image = grenade_img
         self.rect = self.image.get_rect()
         self.rect.center = (x, y)
@@ -288,16 +296,75 @@ class Grenade(pygame.sprite.Sprite):
         self.rect.x += dx
         self.rect.y += dy
 
+        # explode grenade
+        self.explode_timer -= 1
+        if self.explode_timer <= 0:
+            self.kill()
+            explosion = Explosion(self.rect.centerx, self.rect.centery)
+            explosion_group.add(explosion)
+            # do damage to player if nearby
+            distance_x = self.rect.centerx - player.rect.centerx
+            distance_y = self.rect.centery - player.rect.centery
+            if distance_x < TILE_SIZE * 2 and distance_y < TILE_SIZE * 2:
+                player.health -= 50
+
+            # do damage to enemies if nearby
+            for enemy in enemy_group:
+                distance_x = self.rect.centerx - enemy.rect.centerx
+                distance_y = self.rect.centery - enemy.rect.centery
+                if distance_x < TILE_SIZE * 2 and distance_y < TILE_SIZE * 2:
+                    enemy.health -= 50
+
+
+class Explosion(pygame.sprite.Sprite):
+    def __init__(self, x, y):
+        pygame.sprite.Sprite.__init__(self)
+        self.frame_index = 0
+        self.animation_update_time = pygame.time.get_ticks()
+        self.images = self.__animation_images_list()
+        self.image = self.images[self.frame_index]
+        self.rect = self.image.get_rect()
+        self.rect.center = (x, y)
+
+    def animation_update(self):
+        ANIMATION_COOLDOWN = 50
+        if pygame.time.get_ticks() - self.animation_update_time > ANIMATION_COOLDOWN:
+            self.animation_update_time = pygame.time.get_ticks()
+            self.image = self.images[self.frame_index]
+            self.frame_index += 1
+            self.frame_index %= len(self.images)
+
+    def update(self):
+        self.animation_update()
+        if self.frame_index >= len(self.images) - 1:
+            self.kill()
+
+    def __animation_images_list(self):
+        list = []
+        for i in range(1, 6):
+            path = f"src/assets/img/explosion/exp{i}.png"
+            img = pygame.image.load(path).convert_alpha()
+            list.append(img)
+        return list
+
 
 # create sprite group
+enemy_group = pygame.sprite.Group()
 bullet_group = pygame.sprite.Group()
 grenade_group = pygame.sprite.Group()
+explosion_group = pygame.sprite.Group()
 
 x = 200
 y = 200
 scale = 3
-player = Soldier("player", x, y, scale, 5, 20)
-enemy = Soldier("enemy", x + 100, y, scale, 5, 20000)
+player = Soldier("player", x, y, scale, 5, 200)
+enemy_group.add(
+    [
+        Soldier("enemy", x + 100, y, scale, 5, 20),
+        Soldier("enemy", x - 100, y, scale, 5, 20),
+    ]
+)
+
 enemy_moving_left = True
 enemy_moving_right = False
 
@@ -310,14 +377,18 @@ while run:
     player.update()
     player.draw()
 
-    enemy.update()
-    enemy.draw()
+    enemy_group.update()
+    for enemy in enemy_group:
+        enemy.draw()
 
     bullet_group.update()
     bullet_group.draw(screen)
 
     grenade_group.update()
     grenade_group.draw(screen)
+
+    explosion_group.update()
+    explosion_group.draw(screen)
 
     if player.is_alive:
         # shoot bullets
@@ -337,21 +408,22 @@ while run:
 
         player.move(moving_left, moving_right)
 
-    if enemy.is_alive:
-        if enemy.rect.left <= 0:
-            enemy_moving_left = False
-            enemy_moving_right = True
-        if enemy.rect.right >= SCREEN_WIDTH:
-            enemy_moving_left = True
-            enemy_moving_right = False
+    for enemy in enemy_group:
+        if enemy.is_alive:
+            if enemy.rect.left <= 0:
+                enemy_moving_left = False
+                enemy_moving_right = True
+            if enemy.rect.right >= SCREEN_WIDTH:
+                enemy_moving_left = True
+                enemy_moving_right = False
 
-        if enemy_moving_left and enemy_moving_right:
-            enemy.update_action("Idle")
-        elif (enemy_moving_left or enemy_moving_right) and not enemy.in_air:
-            enemy.update_action("Run")
-        else:
-            enemy.update_action("Idle")
-        enemy.move(enemy_moving_left, enemy_moving_right)
+            if enemy_moving_left and enemy_moving_right:
+                enemy.update_action("Idle")
+            elif (enemy_moving_left or enemy_moving_right) and not enemy.in_air:
+                enemy.update_action("Run")
+            else:
+                enemy.update_action("Idle")
+            enemy.move(enemy_moving_left, enemy_moving_right)
 
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
