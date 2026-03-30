@@ -22,6 +22,8 @@ moving_left = False
 moving_right = False
 # bullets
 shoot = False
+# grenade
+grenade = False
 
 # Colors
 BG = (144, 201, 120)
@@ -29,6 +31,7 @@ RED = (255, 0, 0)
 
 # images
 bullet_img = pygame.image.load("src/assets/img/icons/bullet.png").convert_alpha()
+grenade_img = pygame.image.load("src/assets/img/icons/grenade.png").convert_alpha()
 
 
 def draw_bg():
@@ -37,7 +40,7 @@ def draw_bg():
 
 
 class Soldier(pygame.sprite.Sprite):
-    def __init__(self, char_type, x, y, scale, speed, ammo):
+    def __init__(self, char_type, x, y, scale, speed, ammo, grenade_count=5):
         pygame.sprite.Sprite.__init__(self)
         # character properties
         self.char_type = char_type
@@ -57,8 +60,14 @@ class Soldier(pygame.sprite.Sprite):
         self.shoot_cooldown = 0
         self.ammo = ammo
         self.start_ammo = ammo
+
+        # health properties
         self.health = 100
         self.max_health = self.health
+
+        # grenade properties
+        self.grenade_count = grenade_count
+        self.start_grenade = self.grenade_count
 
         # animation properties
         self.animation_dict = self.__get_animation_dict(scale)
@@ -130,6 +139,24 @@ class Soldier(pygame.sprite.Sprite):
             bullet_group.add(bullet)
             self.ammo -= 1
 
+    def throw_grenade(self):
+        if self.grenade_count > 0:
+
+            # this value because bullet should not hit shooter player itself when created
+            self_harm_protection = 10
+
+            # create grenade in right if player is facing right or moving right
+            # else create grenade in left
+            x = self.rect.right if self.direction == 1 else self.rect.left
+            self_harm_protection = (
+                self_harm_protection if self.direction == 1 else -self_harm_protection
+            )
+            grenade = Grenade(
+                x + self_harm_protection, self.rect.centery, self.direction
+            )
+            grenade_group.add(grenade)
+            self.grenade_count -= 1
+
     def __get_animation_dict(self, scale: int):
         # It will create a dictionary of all images I have for all the actions
         # for example
@@ -188,19 +215,24 @@ class Soldier(pygame.sprite.Sprite):
         img = pygame.transform.flip(self.image, self.flip, False)
         screen.blit(img, self.rect)
 
-        ammo_font = pygame.font.SysFont("Arial", 16)
+        font = pygame.font.SysFont("Arial", 16)
         # ammo
-        ammo_surface = ammo_font.render(f"Ammo: {self.ammo}", True, (255, 255, 255))
+        ammo_surface = font.render(f"Ammo: {self.ammo}", True, (255, 255, 255))
         ammo_rect = ammo_surface.get_rect()
         ammo_rect.bottomleft = self.rect.topleft
         screen.blit(ammo_surface, ammo_rect)
         # health
-        health_surface = ammo_font.render(
-            f"Health: {self.health}", True, (255, 255, 255)
-        )
+        health_surface = font.render(f"Health: {self.health}", True, (255, 255, 255))
         health_rect = health_surface.get_rect()
         health_rect.bottomleft = ammo_rect.topleft
         screen.blit(health_surface, health_rect)
+        # grenade
+        grenade_surface = font.render(
+            f"grenade: {self.grenade_count}", True, (255, 255, 255)
+        )
+        grenade_rect = grenade_surface.get_rect()
+        grenade_rect.bottomleft = health_rect.topleft
+        screen.blit(grenade_surface, grenade_rect)
 
 
 class Bullet(pygame.sprite.Sprite):
@@ -229,15 +261,45 @@ class Bullet(pygame.sprite.Sprite):
                 self.kill()
 
 
+class Grenade(pygame.sprite.Sprite):
+    def __init__(self, x, y, direction):
+        pygame.sprite.Sprite.__init__(self)
+        self.speed = 7
+        self.vel_y = -11
+        self.timer = 100
+        self.image = grenade_img
+        self.rect = self.image.get_rect()
+        self.rect.center = (x, y)
+        self.direction = direction
+
+    def update(self):
+        self.vel_y += GRAVITY
+        if self.vel_y > 10:
+            self.vel_y = 10
+
+        # check collision with ground
+        if self.rect.bottom + self.speed > 300:
+            self.vel_y = 0
+            self.speed = 0
+
+        dx = self.speed * self.direction
+        dy = self.vel_y
+
+        self.rect.x += dx
+        self.rect.y += dy
+
+
 # create sprite group
 bullet_group = pygame.sprite.Group()
+grenade_group = pygame.sprite.Group()
 
 x = 200
 y = 200
 scale = 3
 player = Soldier("player", x, y, scale, 5, 20)
 enemy = Soldier("enemy", x + 100, y, scale, 5, 20000)
-
+enemy_moving_left = True
+enemy_moving_right = False
 
 run = True
 while run:
@@ -254,10 +316,16 @@ while run:
     bullet_group.update()
     bullet_group.draw(screen)
 
+    grenade_group.update()
+    grenade_group.draw(screen)
+
     if player.is_alive:
         # shoot bullets
         if shoot:
             player.shoot()
+        elif grenade:
+            player.throw_grenade()
+            grenade = False
         if player.in_air:
             player.update_action("Jump")
         elif moving_left and moving_right:
@@ -268,6 +336,22 @@ while run:
             player.update_action("Idle")
 
         player.move(moving_left, moving_right)
+
+    if enemy.is_alive:
+        if enemy.rect.left <= 0:
+            enemy_moving_left = False
+            enemy_moving_right = True
+        if enemy.rect.right >= SCREEN_WIDTH:
+            enemy_moving_left = True
+            enemy_moving_right = False
+
+        if enemy_moving_left and enemy_moving_right:
+            enemy.update_action("Idle")
+        elif (enemy_moving_left or enemy_moving_right) and not enemy.in_air:
+            enemy.update_action("Run")
+        else:
+            enemy.update_action("Idle")
+        enemy.move(enemy_moving_left, enemy_moving_right)
 
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
@@ -280,6 +364,8 @@ while run:
                 moving_right = True
             if event.key == pygame.K_SPACE:
                 shoot = True
+            if event.key == pygame.K_f:
+                grenade = True
             if event.key == pygame.K_w and player.is_alive:
                 player.jump = True
         if event.type == pygame.KEYUP:
