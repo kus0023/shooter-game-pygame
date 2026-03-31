@@ -25,9 +25,16 @@ shoot = False
 # grenade
 grenade = False
 
+# Font
+FONT_FUTURA = pygame.font.SysFont("futurawindows", 16)
+
 # Colors
 BG = (144, 201, 120)
+BLACK = (0, 0, 0)
+WHITE = (255, 255, 255)
 RED = (255, 0, 0)
+GREEN = (0, 255, 0)
+DARK_GREEN = (2, 48, 32)
 
 # images
 bullet_img = pygame.image.load("src/assets/img/icons/bullet.png").convert_alpha()
@@ -230,32 +237,28 @@ class Soldier(pygame.sprite.Sprite):
             self.is_alive = False
             self.update_action("Death")
 
+    def draw_health_bar(self):
+        # Health Bar
+        border = pygame.Surface(((self.rect.width + 4), 14))
+        border.fill(BLACK)
+        health_bg_surf = pygame.Surface((self.rect.width, 10))
+        health_bg_surf.fill(RED)
+        ratio = self.health / self.max_health
+        health_surf = pygame.Surface((self.rect.width * ratio, 10))
+        health_surf.fill(GREEN)
+        health_rect = health_bg_surf.get_rect()
+        health_rect.bottomleft = self.rect.topleft
+        x = health_rect.x - 2
+        y = health_rect.y - 2
+        screen.blit(border, (x, y))
+        screen.blit(health_bg_surf, health_rect)
+        screen.blit(health_surf, health_rect)
+
     def draw(self):
         img = pygame.transform.flip(self.image, self.flip, False)
         screen.blit(img, self.rect)
 
-        font = pygame.font.SysFont("Futura", 16)
-        # ammo
-        ammo_surface = font.render(
-            f"Ammo: {self.ammo}", True, (255, 255, 255), (0, 0, 0)
-        )
-        ammo_rect = ammo_surface.get_rect()
-        ammo_rect.bottomleft = self.rect.topleft
-        screen.blit(ammo_surface, ammo_rect)
-        # health
-        health_surface = font.render(
-            f"Health: {self.health}", True, (255, 255, 255), (0, 0, 0)
-        )
-        health_rect = health_surface.get_rect()
-        health_rect.bottomleft = ammo_rect.topleft
-        screen.blit(health_surface, health_rect)
-        # grenade
-        grenade_surface = font.render(
-            f"grenade: {self.grenades}", True, (255, 255, 255), (0, 0, 0)
-        )
-        grenade_rect = grenade_surface.get_rect()
-        grenade_rect.bottomleft = health_rect.topleft
-        screen.blit(grenade_surface, grenade_rect)
+        self.draw_health_bar()
 
 
 class ItemBox(pygame.sprite.Sprite):
@@ -276,6 +279,32 @@ class ItemBox(pygame.sprite.Sprite):
                 player.grenades = min(player.grenades + 5, player.max_grenades)
 
             self.kill()
+
+
+class AmmoUI(pygame.sprite.Sprite):
+    def __init__(self):
+        super().__init__()
+        self.image = pygame.Surface((100, 50))
+        self.image.fill(DARK_GREEN)
+        self.rect = self.image.get_rect()
+        self.rect.topleft = (10, 10)
+
+    def update(self, soldier: Soldier):
+        self.image.fill(DARK_GREEN)
+        padding = 5
+        # create surface for bullets
+        bullet_surf = FONT_FUTURA.render(f"Bullet: {soldier.ammo}", True, WHITE)
+
+        # create surface for grenades
+        grenade_surf = FONT_FUTURA.render(f"Grenades: {soldier.grenades}", True, WHITE)
+
+        self.image.blits(
+            [
+                (bullet_surf, (padding, padding)),
+                (grenade_surf, (padding, padding + bullet_surf.get_rect().bottom)),
+            ]
+        )
+        screen.blit(self.image, self.rect)
 
 
 class Bullet(pygame.sprite.Sprite):
@@ -348,8 +377,8 @@ class Grenade(pygame.sprite.Sprite):
 
             # do damage to enemies if nearby
             for enemy in enemy_group:
-                distance_x = self.rect.centerx - enemy.rect.centerx
-                distance_y = self.rect.centery - enemy.rect.centery
+                distance_x = abs(self.rect.centerx - enemy.rect.centerx)
+                distance_y = abs(self.rect.centery - enemy.rect.centery)
                 if distance_x < max_distance and distance_y < max_distance:
                     enemy.health -= 50
 
@@ -396,7 +425,7 @@ item_box_group = pygame.sprite.Group()
 x = 200
 y = 200
 scale = 3
-player = Soldier("player", x, y, scale, 5, 200)
+player = Soldier("player", x, y, scale, 5, 20)
 enemy_group.add(
     [
         Soldier("enemy", x + 100, y, scale, 5, 20),
@@ -410,6 +439,7 @@ item_box_group.add(
         ItemBox("Grenade", 600, 100),
     ]
 )
+ammo_ui = AmmoUI()
 
 enemy_moving_left = True
 enemy_moving_right = False
@@ -437,6 +467,8 @@ while run:
     explosion_group.draw(screen)
     item_box_group.update()
     item_box_group.draw(screen)
+
+    ammo_ui.update(player)
 
     if player.is_alive:
         # shoot bullets
