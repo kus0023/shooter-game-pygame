@@ -1,4 +1,4 @@
-import pygame
+import pygame, random
 
 pygame.init()
 
@@ -88,6 +88,12 @@ class Soldier(pygame.sprite.Sprite):
         # grenade properties
         self.grenades = grenade_count
         self.max_grenades = self.grenades
+
+        # Bot movement
+        self.start_pos = x
+        self.is_idle = False
+        self.rest_time = pygame.time.get_ticks()
+        self.player_detection_distance = TILE_SIZE * 2
 
         # animation properties
         self.animation_dict = self.__get_animation_dict(scale)
@@ -182,6 +188,56 @@ class Soldier(pygame.sprite.Sprite):
             )
             grenade_group.add(grenade)
             self.grenades -= 1
+
+    def bot_movement(self):
+        if self.is_alive:
+
+            # check if player is in sight meaning in front of enemy at certain distance
+            # if so, Stop the enemy and shoot in direction of player
+            size = (self.player_detection_distance, 1)
+            temp_rect = pygame.Rect((0, 0), size)
+            if self.direction == 1:
+                temp_rect.midleft = self.rect.midright
+            else:
+                temp_rect.midright = self.rect.midleft
+            pygame.draw.rect(screen, RED, temp_rect)
+
+            if player.rect.colliderect(temp_rect):
+                self.move(False, False)
+                self.shoot()
+                self.update_action("Idle")
+                return  # don't Run the below code Just stop and shoot
+
+            # choose random time from 1 to 15 second
+            # then either move the bot or stop the bot
+            if pygame.time.get_ticks() - self.rest_time > random.randint(1000, 15000):
+                self.rest_time = pygame.time.get_ticks()
+                if not self.is_idle:  # if moving then stop the bot
+                    self.is_idle = True
+                else:  # if not moving then move the bot in random direction
+                    self.direction = random.choice([1, -1])
+                    self.is_idle = False
+
+            # move to and fro in certain distance
+            if self.direction == 1:  # moving Right
+                if abs(self.rect.right - self.start_pos) >= TILE_SIZE * 4:
+                    self.direction *= -1
+            if self.direction == -1:  # moving Left
+                if abs(self.rect.left - self.start_pos) >= TILE_SIZE * 4:
+                    self.direction *= -1
+
+            # control the animation
+            if self.is_idle:
+                self.move(False, False)
+                self.update_action("Idle")
+            elif self.direction == 1:
+                self.move(False, True)
+                self.update_action("Run")
+            elif self.direction == -1:
+                self.move(True, False)
+                self.update_action("Run")
+
+            self.rest_time += 1
 
     def __get_animation_dict(self, scale: int):
         # It will create a dictionary of all images I have for all the actions
@@ -423,26 +479,23 @@ explosion_group = pygame.sprite.Group()
 item_box_group = pygame.sprite.Group()
 
 x = 200
-y = 200
-scale = 3
+y = 250
+scale = 1.75
 player = Soldier("player", x, y, scale, 5, 20)
 enemy_group.add(
     [
-        Soldier("enemy", x + 100, y, scale, 5, 20),
-        Soldier("enemy", x - 100, y, scale, 5, 20),
+        Soldier("enemy", 600, y, scale, 2, 20),
+        Soldier("enemy", 400, y, scale, 2, 20),
     ]
 )
 item_box_group.add(
     [
-        ItemBox("Health", 200, 100),
-        ItemBox("Ammo", 400, 100),
-        ItemBox("Grenade", 600, 100),
+        ItemBox("Health", 150, 130),
+        ItemBox("Ammo", 400, 130),
+        ItemBox("Grenade", 600, 130),
     ]
 )
 ammo_ui = AmmoUI()
-
-enemy_moving_left = True
-enemy_moving_right = False
 
 run = True
 while run:
@@ -455,6 +508,7 @@ while run:
 
     enemy_group.update()
     for enemy in enemy_group:
+        enemy.bot_movement()
         enemy.draw()
 
     bullet_group.update()
@@ -487,23 +541,6 @@ while run:
             player.update_action("Idle")
 
         player.move(moving_left, moving_right)
-
-    for enemy in enemy_group:
-        if enemy.is_alive:
-            if enemy.rect.left <= 0:
-                enemy_moving_left = False
-                enemy_moving_right = True
-            if enemy.rect.right >= SCREEN_WIDTH:
-                enemy_moving_left = True
-                enemy_moving_right = False
-
-            if enemy_moving_left and enemy_moving_right:
-                enemy.update_action("Idle")
-            elif (enemy_moving_left or enemy_moving_right) and not enemy.in_air:
-                enemy.update_action("Run")
-            else:
-                enemy.update_action("Idle")
-            enemy.move(enemy_moving_left, enemy_moving_right)
 
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
