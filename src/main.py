@@ -1,4 +1,4 @@
-import pygame, random
+import pygame, random, csv
 
 pygame.init()
 
@@ -14,7 +14,11 @@ FPS = 45
 
 # Game variable
 GRAVITY = 0.75
-TILE_SIZE = 40
+level = 1
+ROWS = 16
+COLS = 150
+TILE_SIZE = SCREEN_HEIGHT // ROWS
+TILE_TYPES = 21
 
 
 # movement
@@ -36,6 +40,9 @@ RED = (255, 0, 0)
 GREEN = (0, 255, 0)
 DARK_GREEN = (2, 48, 32)
 
+# Tiles
+tile_img_list = []
+
 # images
 bullet_img = pygame.image.load("src/assets/img/icons/bullet.png").convert_alpha()
 grenade_img = pygame.image.load("src/assets/img/icons/grenade.png").convert_alpha()
@@ -46,6 +53,10 @@ ammo_box_img = pygame.image.load("src/assets/img/icons/ammo_box.png").convert_al
 grenade_box_img = pygame.image.load(
     "src/assets/img/icons/grenade_box.png"
 ).convert_alpha()
+for i in range(TILE_TYPES):
+    img = pygame.image.load(f"src/assets/img/tile/{i}.png").convert_alpha()
+    img = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
+    tile_img_list.append(img)
 
 item_boxes = {
     "Health": health_box_img,
@@ -150,6 +161,7 @@ class Soldier(pygame.sprite.Sprite):
             dy = 0
             self.vel_y = 0
             self.in_air = False
+            self.rect.bottom = 300
 
         self.rect.x += dx
         self.rect.y += dy
@@ -200,7 +212,6 @@ class Soldier(pygame.sprite.Sprite):
                 temp_rect.midleft = self.rect.midright
             else:
                 temp_rect.midright = self.rect.midleft
-            pygame.draw.rect(screen, RED, temp_rect)
 
             if player.rect.colliderect(temp_rect):
                 self.move(False, False)
@@ -315,6 +326,71 @@ class Soldier(pygame.sprite.Sprite):
         screen.blit(img, self.rect)
 
         self.draw_health_bar()
+
+
+class World:
+    def __init__(self):
+        self.obstacle_list = []
+
+    def process_data(self, world_data):
+        # iterating through all the top left point of tile
+
+        player = None
+        scale = 1.75
+        for row_idx, row in enumerate(world_data):  # Row means Y
+            for col_idx, tile in enumerate(row):  # Col means X
+                pt_x = col_idx * TILE_SIZE
+                pt_y = row_idx * TILE_SIZE
+                tile_img = tile_img_list[tile]
+                if isinstance(tile_img, pygame.Surface):
+                    tile_rect = tile_img.get_rect()
+                    tile_rect.topleft = (pt_x, pt_y)
+                else:
+                    raise Exception("Wrong image of Tile")
+
+                if tile == -1:
+                    continue
+                elif tile >= 0 and tile <= 8:
+                    self.obstacle_list.append((tile_img, tile_rect))
+                elif tile == 9 or tile == 10:  # water
+                    Water(tile_img, decoration_group, topleft=tile_rect.topleft)
+                elif tile >= 11 and tile <= 14:  # stone, box, grass decoration
+                    Decorations(tile_img, decoration_group, topleft=tile_rect.topleft)
+                elif tile == 15:  # player
+                    player = Soldier("player", pt_x, pt_y, scale, 5, 20)
+                elif tile == 16:  # enemy
+                    enemy_group.add(Soldier("enemy", pt_x, pt_y, scale, 2, 20))
+                elif tile == 17:  # ammo box
+                    item_box_group.add(ItemBox("Ammo", pt_x, pt_y))
+                elif tile == 18:  # Grenade box
+                    item_box_group.add(ItemBox("Grenade", pt_x, pt_y))
+                elif tile == 19:  # Health box
+                    item_box_group.add(ItemBox("Health", pt_x, pt_y))
+                elif tile == 20:  # exit
+                    Exit(tile_img, decoration_group, topleft=tile_rect.topleft)
+
+        return player
+
+    def draw(self):
+        for obs in self.obstacle_list:
+            screen.blit(obs[0], obs[1])
+
+
+class Decorations(pygame.sprite.Sprite):
+    def __init__(self, image: pygame.Surface, *groups, **position):
+        super().__init__(*groups)
+        self.image = image
+        self.rect = self.image.get_rect(**position)
+
+
+class Water(Decorations):
+    def __init__(self, image, *groups, **position):
+        super().__init__(image, *groups, **position)
+
+
+class Exit(Decorations):
+    def __init__(self, image, *groups, **position):
+        super().__init__(image, *groups, **position)
 
 
 class ItemBox(pygame.sprite.Sprite):
@@ -477,32 +553,33 @@ bullet_group = pygame.sprite.Group()
 grenade_group = pygame.sprite.Group()
 explosion_group = pygame.sprite.Group()
 item_box_group = pygame.sprite.Group()
+decoration_group = pygame.sprite.Group()
 
-x = 200
-y = 250
-scale = 1.75
-player = Soldier("player", x, y, scale, 5, 20)
-enemy_group.add(
-    [
-        Soldier("enemy", 600, y, scale, 2, 20),
-        Soldier("enemy", 400, y, scale, 2, 20),
-    ]
-)
-item_box_group.add(
-    [
-        ItemBox("Health", 150, 130),
-        ItemBox("Ammo", 400, 130),
-        ItemBox("Grenade", 600, 130),
-    ]
-)
+
 ammo_ui = AmmoUI()
+
+# Load level
+world_data = []
+with open(f"src/assets/level{level}_data.csv", mode="r", newline="") as csvfile:
+    reader = csv.reader(csvfile, delimiter=",")
+    prev = reader.line_num
+    # copy all rows list
+    for row in reader:
+        world_data.append(row)
+    # conver string data into int
+    world_data = [[int(c) for c in r] for r in world_data]
+world = World()
+player = world.process_data(world_data)
+if player == None:
+    raise Exception("There is no player object present in map data.")
 
 run = True
 while run:
     clock.tick(45)
 
     draw_bg()
-
+    world.draw()
+    decoration_group.draw(screen)
     player.update()
     player.draw()
 
