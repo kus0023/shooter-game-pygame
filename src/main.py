@@ -67,7 +67,6 @@ item_boxes = {
 
 def draw_bg():
     screen.fill(BG)
-    pygame.draw.line(screen, RED, (0, 300), (SCREEN_WIDTH, 300))
 
 
 class Soldier(pygame.sprite.Sprite):
@@ -157,11 +156,23 @@ class Soldier(pygame.sprite.Sprite):
         dy += self.vel_y
 
         # collision on ground
-        if self.rect.bottom + dy > 300:
-            dy = 0
-            self.vel_y = 0
-            self.in_air = False
-            self.rect.bottom = 300
+        width = self.image.get_width()
+        height = self.image.get_height()
+        for tile in world.obstacle_list:
+            # collision in horizontal direction
+            if tile[1].colliderect(dx + self.rect.x, self.rect.y, width, height):
+                dx = 0
+            # collision in vertical direction
+            if tile[1].colliderect(self.rect.x, self.rect.y + dy, width, height):
+                dy = 0
+                # if jumping - below tile
+                if self.vel_y < 0:
+                    self.vel_y = 0
+                    dy = tile[1].bottom - self.rect.top
+                elif self.vel_y >= 0:  # falling - above ground
+                    self.vel_y = 0
+                    dy = tile[1].top - self.rect.bottom
+                    self.in_air = False
 
         self.rect.x += dx
         self.rect.y += dy
@@ -185,19 +196,7 @@ class Soldier(pygame.sprite.Sprite):
 
     def throw_grenade(self):
         if self.grenades > 0:
-
-            # this value because bullet should not hit shooter player itself when created
-            self_harm_protection = 10
-
-            # create grenade in right if player is facing right or moving right
-            # else create grenade in left
-            x = self.rect.right if self.direction == 1 else self.rect.left
-            self_harm_protection = (
-                self_harm_protection if self.direction == 1 else -self_harm_protection
-            )
-            grenade = Grenade(
-                x + self_harm_protection, self.rect.centery, self.direction
-            )
+            grenade = Grenade(self.rect.centerx, self.rect.centery, self.direction)
             grenade_group.add(grenade)
             self.grenades -= 1
 
@@ -330,7 +329,8 @@ class Soldier(pygame.sprite.Sprite):
 
 class World:
     def __init__(self):
-        self.obstacle_list = []
+        # Tuple of (tile_image, tile_rect)
+        self.obstacle_list: list[tuple[pygame.Surface, pygame.Rect]] = []
 
     def process_data(self, world_data):
         # iterating through all the top left point of tile
@@ -454,6 +454,12 @@ class Bullet(pygame.sprite.Sprite):
         if self.rect.right < 0 or self.rect.left > SCREEN_WIDTH:
             self.kill()
 
+        # collision with obstacle tiles
+        for tile in world.obstacle_list:
+            # collision in horizontal direction
+            if tile[1].colliderect(self.rect):
+                self.kill()
+
         # collision with characters
         if pygame.sprite.spritecollide(player, bullet_group, False):
             if player.is_alive:
@@ -480,16 +486,27 @@ class Grenade(pygame.sprite.Sprite):
 
     def update(self):
         self.vel_y += GRAVITY
-        if self.vel_y > 10:
-            self.vel_y = 10
+        dx = self.direction * self.speed
+        dy = self.vel_y
 
         # check collision with ground
-        if self.rect.bottom + self.speed > 300:
-            self.vel_y = 0
-            self.speed = 0
-
-        dx = self.speed * self.direction
-        dy = self.vel_y
+        width = self.image.get_width()
+        height = self.image.get_height()
+        for tile in world.obstacle_list:
+            # collision in horizontal direction
+            if tile[1].colliderect(dx + self.rect.x, self.rect.y, width, height):
+                self.direction *= -1
+                dx = self.direction * self.speed
+            # collision in vertical direction
+            if tile[1].colliderect(self.rect.x, self.rect.y + dy, width, height):
+                self.speed = 0
+                # if throwing - means below tile
+                if self.vel_y < 0:
+                    self.vel_y = 0
+                    dy = tile[1].bottom - self.rect.top
+                elif self.vel_y >= 0:  # falling - above ground
+                    self.vel_y = 0
+                    dy = tile[1].top - self.rect.bottom
 
         self.rect.x += dx
         self.rect.y += dy
