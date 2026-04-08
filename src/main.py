@@ -1,5 +1,8 @@
 import pygame, random, csv, button
+from pygame import mixer
+from enum import Enum, auto
 
+mixer.init()
 pygame.init()
 
 SCREEN_WIDTH = 800
@@ -24,6 +27,7 @@ level = 1
 screen_scroll = 0
 bg_scroll = 0
 start_game = False
+start_intro_transition = True
 
 # movement
 moving_left = False
@@ -43,6 +47,20 @@ WHITE = (255, 255, 255)
 RED = (255, 0, 0)
 GREEN = (0, 255, 0)
 DARK_GREEN = (2, 48, 32)
+
+# load music and sound
+pygame.mixer.music.load("src/assets/audio/music2.mp3")
+pygame.mixer.music.set_volume(0.3)
+pygame.mixer.music.play(-1, 0.0, 5000)
+
+jump_fx = pygame.mixer.Sound("src/assets/audio/jump.wav")
+jump_fx.set_volume(0.5)
+grenade_fx = pygame.mixer.Sound("src/assets/audio/grenade.wav")
+grenade_fx.set_volume(0.5)
+player_shot_fx = pygame.mixer.Sound("src/assets/audio/shot.wav")
+player_shot_fx.set_volume(0.6)
+enemy_shot_fx = pygame.mixer.Sound("src/assets/audio/shot.wav")
+enemy_shot_fx.set_volume(0.3)
 
 # Tiles
 tile_img_list = []
@@ -267,6 +285,10 @@ class Soldier(pygame.sprite.Sprite):
             bullet = Bullet(x + self_harm_protection, self.rect.centery, self.direction)
             bullet_group.add(bullet)
             self.ammo -= 1
+            if self.char_type == "player":
+                player_shot_fx.play()
+            if self.char_type == "enemy":
+                enemy_shot_fx.play()
 
     def throw_grenade(self):
         if self.grenades > 0:
@@ -400,15 +422,71 @@ class Soldier(pygame.sprite.Sprite):
     def draw(self):
         img = pygame.transform.flip(self.image, self.flip, False)
         screen.blit(img, self.rect)
-        pygame.draw.line(
-            self.image,
-            "red",
-            self.rect.center,
-            (self.rect.centerx + (TILE_SIZE * 3 // 2), self.rect.centery),
-            4,
-        )
-
         self.draw_health_bar()
+
+
+class ScreenFadeType(Enum):
+    TOP_TO_DOWN_CLOSE = 1
+    MIDDLE_SQUARE_OPEN = 2
+
+
+class ScreenFade:
+
+    def __init__(self, type: ScreenFadeType, color, speed):
+        self.type = type
+        self.color = color
+        self.speed = speed
+        self.fade_counter = 0
+
+    def fade(self):
+        fade_completed = False
+        self.fade_counter += self.speed
+
+        if self.type == ScreenFadeType.TOP_TO_DOWN_CLOSE:
+            pygame.draw.rect(
+                screen, self.color, (0, 0, SCREEN_WIDTH, self.fade_counter)
+            )
+            if self.fade_counter > SCREEN_HEIGHT:
+                fade_completed = True
+                self.fade_counter = SCREEN_HEIGHT
+
+        if self.type == ScreenFadeType.MIDDLE_SQUARE_OPEN:
+            pygame.draw.rect(
+                screen,
+                self.color,
+                (-self.fade_counter, 0, SCREEN_WIDTH // 2, SCREEN_HEIGHT),
+            )
+            pygame.draw.rect(
+                screen,
+                self.color,
+                (
+                    (SCREEN_WIDTH // 2) + self.fade_counter,
+                    0,
+                    SCREEN_WIDTH // 2,
+                    SCREEN_HEIGHT,
+                ),
+            )
+            pygame.draw.rect(
+                screen,
+                self.color,
+                (0, -self.fade_counter, SCREEN_WIDTH, SCREEN_HEIGHT // 2),
+            )
+            pygame.draw.rect(
+                screen,
+                self.color,
+                (
+                    0,
+                    (SCREEN_HEIGHT // 2) + self.fade_counter,
+                    SCREEN_WIDTH,
+                    SCREEN_HEIGHT // 2,
+                ),
+            )
+
+            if self.fade_counter > SCREEN_WIDTH:
+                fade_completed = True
+                self.fade_counter = 0
+
+        return fade_completed
 
 
 class World:
@@ -610,6 +688,7 @@ class Grenade(pygame.sprite.Sprite):
         # explode grenade
         self.explode_timer -= 1
         if self.explode_timer <= 0:
+            grenade_fx.play()
             self.kill()
             explosion = Explosion(self.rect.centerx, self.rect.centery)
             explosion_group.add(explosion)
@@ -698,7 +777,8 @@ world = World()
 player = world.process_data(world_data)
 if player == None:
     raise Exception("There is no player object present in map data.")
-
+death_fade = ScreenFade(ScreenFadeType.TOP_TO_DOWN_CLOSE, "pink", 5)
+intro_transition = ScreenFade(ScreenFadeType.MIDDLE_SQUARE_OPEN, "black", 10)
 run = True
 while run:
     clock.tick(45)
@@ -708,6 +788,7 @@ while run:
         screen.fill(BG)
         if start_btn.draw(screen):
             start_game = True
+            start_intro_transition = True
 
         if exit_btn.draw(screen):
             run = False
@@ -758,6 +839,7 @@ while run:
 
             # check if player has completed the level
             if level_complete:
+                start_intro_transition = True
                 level += 1
                 if level > MAX_LEVEL:
                     print("All level completed.")
@@ -781,26 +863,37 @@ while run:
                     raise Exception("There is no player object present in map data.")
         else:  # player is not alive show restart button
             screen_scroll = 0
-            reset = restart_btn.draw(screen)
 
-            if reset == True:
-                bg_scroll = 0
-                world_data = []
-                reset_level()
-                with open(
-                    f"src/assets/level{level}_data.csv", mode="r", newline=""
-                ) as csvfile:
-                    reader = csv.reader(csvfile, delimiter=",")
-                    prev = reader.line_num
-                    # copy all rows list
-                    for row in reader:
-                        world_data.append(row)
-                    # conver string data into int
-                    world_data = [[int(c) for c in r] for r in world_data]
-                world = World()
-                player = world.process_data(world_data)
-                if player == None:
-                    raise Exception("There is no player object present in map data.")
+            if death_fade.fade():
+                reset = restart_btn.draw(screen)
+
+                if reset == True:
+                    death_fade.fade_counter = 0
+                    start_intro_transition = True
+                    bg_scroll = 0
+                    world_data = []
+                    reset_level()
+                    with open(
+                        f"src/assets/level{level}_data.csv", mode="r", newline=""
+                    ) as csvfile:
+                        reader = csv.reader(csvfile, delimiter=",")
+                        prev = reader.line_num
+                        # copy all rows list
+                        for row in reader:
+                            world_data.append(row)
+                        # conver string data into int
+                        world_data = [[int(c) for c in r] for r in world_data]
+                    world = World()
+                    player = world.process_data(world_data)
+                    if player == None:
+                        raise Exception(
+                            "There is no player object present in map data."
+                        )
+
+    if start_intro_transition:
+        if intro_transition.fade():
+            start_intro_transition = False
+            intro_transition.fade_counter = 0
 
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
@@ -817,6 +910,7 @@ while run:
                 grenade = True
             if event.key == pygame.K_w and player.is_alive:
                 player.jump = True
+                jump_fx.play()
         if event.type == pygame.KEYUP:
             if event.key == pygame.K_a:
                 moving_left = False
