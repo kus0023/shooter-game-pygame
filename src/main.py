@@ -49,7 +49,7 @@ def reset_level():
 
 def load_level(level):
     world_data = []
-    with open(f"src/assets/level{level}_data.csv", mode="r", newline="") as csvfile:
+    with open(level_path(level), mode="r", newline="") as csvfile:
         reader = csv.reader(csvfile, delimiter=",")
         prev = reader.line_num
         # copy all rows list

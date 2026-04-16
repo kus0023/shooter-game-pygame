@@ -1,6 +1,6 @@
 import pygame
 from constants import GRAVITY, TILE_SIZE
-from assets import grenade_fx, grenade_img
+from assets import grenade_fx, grenade_img, explosion_animation_list
 from sprite_group import explosion_group, enemy_group
 
 
@@ -69,7 +69,7 @@ class Explosion(pygame.sprite.Sprite):
         pygame.sprite.Sprite.__init__(self)
         self.frame_index = 0
         self.animation_update_time = pygame.time.get_ticks()
-        self.images = self.__animation_images_list()
+        self.images = explosion_animation_list()
         self.image = self.images[self.frame_index]
         self.rect = self.image.get_rect()
         self.rect.center = (x, y)
@@ -87,12 +87,3 @@ class Explosion(pygame.sprite.Sprite):
         self.animation_update()
         if self.frame_index >= len(self.images) - 1:
             self.kill()
-
-    def __animation_images_list(self):
-        # optimize this this should load once in asset then we can use
-        list = []
-        for i in range(1, 6):
-            path = f"src/assets/img/explosion/exp{i}.png"
-            img = pygame.image.load(path).convert_alpha()
-            list.append(img)
-        return list

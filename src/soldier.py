@@ -4,6 +4,7 @@ from sprite_group import *
 from assets import player_shot_fx, enemy_shot_fx
 from bullet import Bullet
 from grenade import Grenade
+from assets import get_animation_dict
 
 
 class Soldier(pygame.sprite.Sprite):
@@ -44,7 +45,7 @@ class Soldier(pygame.sprite.Sprite):
         self.dead_body_removal_time = 60
 
         # animation properties
-        self.animation_dict = self.__get_animation_dict(scale)
+        self.animation_dict = get_animation_dict(scale, char_type)
         self.action = "Idle"
         self.frame_index = 0
         self.update_time = pygame.time.get_ticks()
@@ -228,32 +229,6 @@ class Soldier(pygame.sprite.Sprite):
                 self.update_action("Run")
 
             self.rest_time += 1
-
-    def __get_animation_dict(self, scale: int):
-        # It will create a dictionary of all images I have for all the actions
-        # for example
-        # animation_dict = { "idle": [images...], "run": [images..], ...so on}
-        animation_dict = {}
-
-        # generic function to load all images of action and add it to dictionary
-        def load_image_from_asset(name, size, scale=scale):
-            animation_dict[name] = list()
-            for i in range(size):
-                path = f"src/assets/img/{self.char_type}/{name}/{i}.png"
-                img = pygame.image.load(path).convert_alpha()
-                # scale up the image
-                width = int(img.get_width() * scale)
-                height = int(img.get_height() * scale)
-                img = pygame.transform.scale(img, (width, height))
-                # add to dictionary
-                animation_dict[name].append(img)
-
-        load_image_from_asset("Idle", 5)
-        load_image_from_asset("Death", 8)
-        load_image_from_asset("Jump", 1)
-        load_image_from_asset("Run", 6)
-
-        return animation_dict
 
     def update_action(self, new_action: str):
         if new_action not in self.animation_dict.keys():
